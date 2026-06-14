@@ -52,57 +52,6 @@ const WALL_Z = -0.35;       // back wall plane
 const TABLE_Z = 0.6;        // table sits forward, in the middle of the room
 
 // ---------------------------------------------------------------------------
-// Procedural wood texture — colour map + matching grayscale bump map
-// ---------------------------------------------------------------------------
-function makeWoodTextures(species) {
-  const spec = WOOD[species];
-  const W = 512, H = 512;
-  const color = document.createElement('canvas'); color.width = W; color.height = H;
-  const cx = color.getContext('2d');
-  const bump = document.createElement('canvas'); bump.width = W; bump.height = H;
-  const bx = bump.getContext('2d');
-
-  cx.fillStyle = rgb(spec.base); cx.fillRect(0, 0, W, H);
-  bx.fillStyle = '#808080'; bx.fillRect(0, 0, W, H);
-
-  let s = 9301;
-  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-
-  for (let i = 0; i < 120; i++) {
-    const x = rnd() * W;
-    const amp = 6 + rnd() * 22, freq = 1.5 + rnd() * 3.5;
-    const width = 0.6 + rnd() * 2.4, dark = rnd() * 0.5 + 0.15;
-    cx.beginPath(); bx.beginPath();
-    for (let y = 0; y <= H; y += 4) {
-      const xx = x + Math.sin((y / H) * Math.PI * freq + i) * amp + Math.sin(y * 0.05 + i * 2) * (amp * 0.25);
-      if (y === 0) { cx.moveTo(xx, y); bx.moveTo(xx, y); } else { cx.lineTo(xx, y); bx.lineTo(xx, y); }
-    }
-    cx.strokeStyle = rgba(spec.streak, dark * 0.7); cx.lineWidth = width; cx.stroke();
-    bx.strokeStyle = `rgba(40,40,40,${dark * 0.5})`; bx.lineWidth = width; bx.stroke();
-  }
-  for (let i = 0; i < 9000; i++) {
-    cx.fillStyle = rgba(spec.grain, rnd() * 0.08);
-    cx.fillRect(rnd() * W, rnd() * H, 1, 1 + rnd() * 2);
-  }
-  const knots = 1 + Math.floor(rnd() * 2);
-  for (let k = 0; k < knots; k++) {
-    const kx = 40 + rnd() * (W - 80), ky = 40 + rnd() * (H - 80);
-    for (let r = 14; r > 0; r -= 1.4) {
-      cx.beginPath(); cx.ellipse(kx, ky, r, r * 1.5, 0, 0, Math.PI * 2);
-      cx.strokeStyle = rgba(spec.streak, 0.18); cx.lineWidth = 1.1; cx.stroke();
-    }
-    cx.beginPath(); cx.ellipse(kx, ky, 4, 6, 0, 0, Math.PI * 2);
-    cx.fillStyle = rgba(spec.streak, 0.55); cx.fill();
-  }
-
-  const map = new THREE.CanvasTexture(color);
-  const bumpMap = new THREE.CanvasTexture(bump);
-  for (const t of [map, bumpMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
-  map.colorSpace = THREE.SRGBColorSpace;
-  return { map, bumpMap };
-}
-
-// ---------------------------------------------------------------------------
 // Scene setup
 // ---------------------------------------------------------------------------
 export function initScene(container, opts = {}) {
@@ -160,26 +109,42 @@ export function initScene(container, opts = {}) {
   contact.rotation.x = -Math.PI / 2; contact.position.y = 0.005; contact.renderOrder = 1;
   scene.add(contact);
 
-  // wood materials cached per species (a table mixes two species at once)
+  // PBR wood: photo albedo + normal + roughness maps, cached per species
+  const texLoader = new THREE.TextureLoader();
+  const WOOD_TILE = 0.4;   // grain density (tiles per board-unit)
   const woodMatCache = {};
   function getWoodMat(wood) {
     if (!woodMatCache[wood]) {
-      const { map, bumpMap } = makeWoodTextures(wood);
+      const base = '/assets/wood/' + wood;
+      const map = texLoader.load(base + '_diff.jpg');
+      const normalMap = texLoader.load(base + '_nor.jpg');
+      const roughnessMap = texLoader.load(base + '_rough.jpg');
+      map.colorSpace = THREE.SRGBColorSpace;
+      for (const t of [map, normalMap, roughnessMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
       woodMatCache[wood] = new THREE.MeshStandardMaterial({
-        map, bumpMap, bumpScale: 0.6, roughness: WOOD[wood].roughness, metalness: 0, envMapIntensity: 0.7,
+        map, normalMap, roughnessMap, roughness: 1, metalness: 0, envMapIntensity: 0.85,
       });
     }
     return woodMatCache[wood];
   }
 
-  // a wood board with its own texture repeat so grain scale stays natural
-  function board(mat, sx, sy, sz, px, py, pz, repU = 1, repV = 1) {
+  // clone a wood material with its own per-mesh texture repeat (natural grain)
+  function woodInstance(mat, repU, repV) {
     const m = mat.clone();
-    m.map = mat.map.clone(); m.bumpMap = mat.bumpMap.clone();
-    m.map.needsUpdate = m.bumpMap.needsUpdate = true;
-    m.map.repeat.set(repU, repV); m.bumpMap.repeat.set(repU, repV);
-    m.map.colorSpace = THREE.SRGBColorSpace;
-    const mesh = new THREE.Mesh(roundedBox(sx, sy, sz), m);
+    const u = Math.max(0.5, repU * WOOD_TILE), v = Math.max(0.5, repV * WOOD_TILE);
+    for (const key of ['map', 'normalMap', 'roughnessMap']) {
+      if (!mat[key]) continue;
+      m[key] = mat[key].clone();
+      m[key].needsUpdate = true;
+      m[key].wrapS = m[key].wrapT = THREE.RepeatWrapping;
+      m[key].repeat.set(u, v);
+    }
+    if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+    return m;
+  }
+
+  function board(mat, sx, sy, sz, px, py, pz, repU = 1, repV = 1) {
+    const mesh = new THREE.Mesh(roundedBox(sx, sy, sz), woodInstance(mat, repU, repV));
     mesh.position.set(px, py, pz);
     mesh.castShadow = true; mesh.receiveShadow = true;
     return mesh;
@@ -187,12 +152,7 @@ export function initScene(container, opts = {}) {
 
   // a wood cylinder (round tabletop) with the same material treatment
   function disc(mat, radius, h, px, py, pz, rep = 4) {
-    const m = mat.clone();
-    m.map = mat.map.clone(); m.bumpMap = mat.bumpMap.clone();
-    m.map.needsUpdate = m.bumpMap.needsUpdate = true;
-    m.map.repeat.set(rep, rep); m.bumpMap.repeat.set(rep, rep);
-    m.map.colorSpace = THREE.SRGBColorSpace;
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h, 64), m);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h, 64), woodInstance(mat, rep, rep));
     mesh.position.set(px, py, pz);
     mesh.castShadow = true; mesh.receiveShadow = true;
     return mesh;
