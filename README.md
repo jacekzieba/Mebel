@@ -28,6 +28,10 @@ Następnie otwórz **http://localhost:3000**
   - **HDRI** (`public/assets/env.hdr`, CC0 Poly Haven) dla realistycznych odbić — z `RoomEnvironment` jako natychmiastowym fallbackiem,
   - **RectAreaLight** — miękkie światło dzienne z okna,
   - **post-processing** (SSAO + bloom + SMAA + OutputPass) przez `EffectComposer`.
+- **Path tracing** (branch `pathtracing`): przycisk „✨ Render HD" w rogu sceny
+  uruchamia fotorealistyczny render bieżącej konfiguracji (`three-gpu-pathtracer`,
+  zwendorowany offline). Obraz akumuluje się progresywnie do ~64 próbek; każda
+  zmiana parametru, obrót kamery lub ponowny klik wraca do podglądu real-time.
 - Szacowana cena (regał: objętość × stawka m³; blat: powierzchnia × stawka m² + obróbka).
 - Komentarz oraz opcjonalne dane kontaktowe.
 

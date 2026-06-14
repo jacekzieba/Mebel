@@ -12,6 +12,20 @@ import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
+
+// three-gpu-pathtracer 0.0.23 reads Scene.background/environmentRotation (Euler,
+// added to three in r163). We pin three 0.160, so shim them lazily per-instance.
+for (const prop of ['backgroundRotation', 'environmentRotation']) {
+  if (!(prop in THREE.Scene.prototype)) {
+    const key = '_' + prop;
+    Object.defineProperty(THREE.Scene.prototype, prop, {
+      get() { return this[key] || (this[key] = new THREE.Euler()); },
+      set(v) { this[key] = v; },
+      configurable: true,
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Wood species: pricing (used by app.js) + colour palette for procedural grain
@@ -91,7 +105,7 @@ function makeWoodTextures(species) {
 // ---------------------------------------------------------------------------
 // Scene setup
 // ---------------------------------------------------------------------------
-export function initScene(container) {
+export function initScene(container, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -111,11 +125,13 @@ export function initScene(container) {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.background = new THREE.Color('#d9cdbb');
 
-  new RGBELoader().load('/assets/env.hdr', (hdr) => {
+  // raster uses the prefiltered PMREM env; the path tracer needs the raw
+  // equirectangular HDR for its environment importance sampling, so keep both
+  let hdrEquirect = null;
+  new RGBELoader().setDataType(THREE.FloatType).load('/assets/env.hdr', (hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
-    const env = pmrem.fromEquirectangular(hdr).texture;
-    scene.environment = env;
-    hdr.dispose();
+    hdrEquirect = hdr;
+    scene.environment = pmrem.fromEquirectangular(hdr).texture;
   });
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 100);
@@ -376,8 +392,21 @@ export function initScene(container) {
   composer.addPass(new SMAAPass(1, 1));
   composer.addPass(new OutputPass());
 
+  // ---- path tracing (offline, on demand) ---------------------------------
+  // The real-time raster view is for configuring; "Render HD" path-traces the
+  // *current* configuration, accumulating samples into a photoreal still.
+  // Any change (slider, product, camera move, resize) drops back to raster.
+  const PT_MAX = 64;        // progressive image is clean well before this
+  let pathTracer = null;
+  let ptActive = false;
+  let ptPrevEnv = null;
+
+  let lastW = 0, lastH = 0;
   function resize() {
+    if (ptActive) return;   // never disturb an in-progress path trace
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
+    if (w === lastW && h === lastH) return;   // ignore spurious observer fires
+    lastW = w; lastH = h;
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -385,9 +414,62 @@ export function initScene(container) {
   new ResizeObserver(resize).observe(container);
   resize();
 
-  renderer.setAnimationLoop(() => { controls.update(); composer.render(); });
+  function startHD() {
+    try {
+      if (!pathTracer) {
+        pathTracer = new WebGLPathTracer(renderer);
+        pathTracer.tiles.set(2, 2);          // split work → UI stays responsive
+        pathTracer.filterGlossyFactor = 0.5; // fewer fireflies on glossy wood
+        pathTracer.bounces = 3;
+        pathTracer.renderScale = 0.5;        // internal res; upscaled to canvas
+      }
+      // light the trace from the scene's own lights + emissive window; the
+      // PMREM/HDRI env used by raster isn't a format the sampler accepts here
+      ptPrevEnv = scene.environment;
+      scene.environment = null;
+      pathTracer.setScene(scene, camera);
+      ptActive = true;
+      opts.onHD?.({ active: true, samples: 0, max: PT_MAX });
+    } catch (err) {
+      console.error('[pathtracer] startHD failed:', err);
+      scene.environment = ptPrevEnv || scene.environment;
+      ptActive = false;
+      opts.onHD?.({ active: false, error: String(err && err.message || err) });
+    }
+  }
 
-  return { update };
+  function stopHD() {
+    if (!ptActive) return;
+    ptActive = false;
+    if (ptPrevEnv) { scene.environment = ptPrevEnv; ptPrevEnv = null; }
+    opts.onHD?.({ active: false });
+  }
+
+  controls.addEventListener('start', stopHD);   // any orbit/zoom cancels HD
+
+  renderer.setAnimationLoop(() => {
+    if (ptActive) {
+      try {
+        if (pathTracer.samples < PT_MAX) {
+          pathTracer.renderSample();
+          const done = pathTracer.samples >= PT_MAX;
+          opts.onHD?.({ active: true, done, samples: Math.floor(pathTracer.samples), max: PT_MAX });
+        }
+      } catch (err) {
+        console.error('[pathtracer] renderSample failed:', err);
+        stopHD();
+      }
+      return;
+    }
+    controls.update();
+    composer.render();
+  });
+
+  return {
+    update(state) { stopHD(); update(state); },
+    startHD,
+    stopHD,
+  };
 }
 
 // ---------------------------------------------------------------------------
