@@ -4,7 +4,7 @@
     {
       "name": "mebel",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
+      "runtimeArgs": ["scripts/local-server.js"],
       "port": 3000
     }
   ]

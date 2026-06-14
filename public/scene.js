@@ -356,7 +356,7 @@ export function initScene(container, opts = {}) {
   // The real-time raster view is for configuring; "Render HD" path-traces the
   // *current* configuration, accumulating samples into a photoreal still.
   // Any change (slider, product, camera move, resize) drops back to raster.
-  const PT_MAX = 400;       // path tracing converges to photoreal with samples
+  const PT_MAX = 256;       // PBR materials converge clean well before this
   let pathTracer = null;
   let ptActive = false;
   let ptPrevEnv = null;
@@ -398,7 +398,8 @@ export function initScene(container, opts = {}) {
         pathTracer.renderScale = 0.6;        // fewer pixels → more samples/sec
       }
       // light the trace with a smooth procedural environment (importance-sampled
-      // → low noise) plus the scene's own lights
+      // → low noise, fast convergence). A full HDRI here is far slower to sample
+      // for little gain in an enclosed room; the HDRI still drives raster env.
       ptPrevEnv = scene.environment;
       scene.environment = getPtEnv();
       pathTracer.setScene(scene, camera);

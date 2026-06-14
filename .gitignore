@@ -1,4 +1,4 @@
-# local order storage (written by server.js when run locally)
+# local order storage (written by scripts/local-server.js)
 /data/*.csv
 /data/*.txt
 

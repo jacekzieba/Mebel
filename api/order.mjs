@@ -1,6 +1,4 @@
-'use strict';
-
-// Vercel serverless endpoint — mirror of the local /api/order in server.js,
+// Vercel serverless endpoint — mirror of the local /api/order implementation,
 // but WITHOUT writing to disk (Vercel's filesystem is read-only, and persisting
 // orders isn't needed for the shared demo). It validates the payload and echoes
 // the computed order so the frontend's success flow works unchanged.
@@ -65,16 +63,34 @@ function buildOrder(input) {
   return { ...base, width_cm: width, height_cm: height, depth_cm: depth, shelves, price_pln: price };
 }
 
-module.exports = (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-    return;
-  }
-  try {
-    const input = typeof req.body === 'object' && req.body ? req.body : {};
-    const order = buildOrder(input);
-    res.status(200).json({ ok: true, order });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: 'Nie udało się złożyć zamówienia.' });
-  }
+export default {
+  async fetch(request) {
+    if (request.method !== 'POST') {
+      return Response.json(
+        { ok: false, error: 'Method Not Allowed' },
+        { status: 405, headers: { Allow: 'POST' } },
+      );
+    }
+
+    let input;
+    try {
+      input = await request.json();
+    } catch {
+      return Response.json(
+        { ok: false, error: 'Nieprawidłowe dane.' },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const order = buildOrder(input && typeof input === 'object' ? input : {});
+      return Response.json({ ok: true, order });
+    } catch (err) {
+      console.error('Order error:', err);
+      return Response.json(
+        { ok: false, error: 'Nie udało się złożyć zamówienia.' },
+        { status: 500 },
+      );
+    }
+  },
 };
