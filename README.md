@@ -8,7 +8,7 @@ w czasie rzeczywistym i zapisem zamówień na dysk dla CRM.
 Wymagany tylko Node.js (zero zależności, brak `npm install`):
 
 ```bash
-node server.js
+node scripts/local-server.js
 ```
 
 Następnie otwórz **http://localhost:3000**
@@ -45,11 +45,12 @@ Dla regału wypełnione są `height_cm` i `shelves`; dla blatu — `thickness_cm
 ## Struktura
 
 ```
-server.js          # serwer HTTP (Node wbudowany) + zapis zamówień
-public/index.html  # interfejs kreatora (importmap dla Three.js)
-public/styles.css  # style
-public/app.js      # formularz, ceny, wysyłka zamówienia
-public/scene.js    # wizualizacja 3D (Three.js) + tekstury drewna
-public/vendor/     # lokalnie zwendorowany Three.js (offline, bez CDN)
-data/              # zapisane zamówienia (CSV + TXT)
+scripts/local-server.js  # lokalny serwer HTTP (Node wbudowany) + zapis zamówień
+api/order.mjs            # bezstanowy endpoint zamówień dla Vercel
+public/index.html        # interfejs kreatora (importmap dla Three.js)
+public/styles.css        # style
+public/app.js            # formularz, ceny, wysyłka zamówienia
+public/scene.js          # wizualizacja 3D (Three.js) + tekstury drewna
+public/vendor/           # lokalnie zwendorowany Three.js (offline, bez CDN)
+data/                    # zapisane zamówienia (CSV + TXT)
 ```
