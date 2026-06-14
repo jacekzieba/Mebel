@@ -396,7 +396,7 @@ export function initScene(container, opts = {}) {
   // The real-time raster view is for configuring; "Render HD" path-traces the
   // *current* configuration, accumulating samples into a photoreal still.
   // Any change (slider, product, camera move, resize) drops back to raster.
-  const PT_MAX = 160;       // higher ceiling now that variance is much lower
+  const PT_MAX = 400;       // path tracing converges to photoreal with samples
   let pathTracer = null;
   let ptActive = false;
   let ptPrevEnv = null;
@@ -432,10 +432,10 @@ export function initScene(container, opts = {}) {
     try {
       if (!pathTracer) {
         pathTracer = new WebGLPathTracer(renderer);
-        pathTracer.tiles.set(2, 2);          // split work → UI stays responsive
-        pathTracer.filterGlossyFactor = 0.5; // fewer fireflies on glossy wood
+        pathTracer.tiles.set(3, 3);          // split work → UI stays responsive
+        pathTracer.filterGlossyFactor = 1.0; // strongly tame glossy fireflies
         pathTracer.bounces = 4;
-        pathTracer.renderScale = 0.75;       // internal res; upscaled to canvas
+        pathTracer.renderScale = 0.6;        // fewer pixels → more samples/sec
       }
       // light the trace with a smooth procedural environment (importance-sampled
       // → low noise) plus the scene's own lights
