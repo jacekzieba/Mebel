@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sobczak — Kreator półki na wymiar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◧</span>
+      <span class="brand-name">SOBCZAK<small>meble na wymiar</small></span>
+    </div>
+    <nav class="topbar-meta">Kreator mebli na wymiar</nav>
+  </header>
+
+  <main class="layout">
+    <!-- Wizualizacja -->
+    <section class="stage" aria-label="Wizualizacja produktu">
+      <div class="stage-frame">
+        <div id="scene" class="scene">
+          <span class="scene-hint">↺ obróć myszą · scroll = zoom</span>
+        </div>
+      </div>
+      <div class="stage-caption">
+        <div class="dims-readout" id="dims-readout"></div>
+        <span class="wood-readout" id="r-wood">Sosna</span>
+      </div>
+    </section>
+
+    <!-- Konfigurator -->
+    <aside class="panel">
+      <div class="panel-head">
+        <h1 id="panel-title">Zaprojektuj swój regał</h1>
+        <p>Ustaw wymiary i materiał. Podgląd zmienia się na żywo.</p>
+      </div>
+
+      <form id="config" autocomplete="off">
+        <div class="field">
+          <span class="field-label">Produkt</span>
+          <div class="product-picker three" role="radiogroup" aria-label="Produkt">
+            <label class="prod-card">
+              <input type="radio" name="product" value="regal" checked />
+              <span class="prod-icon">▤</span>
+              <span class="prod-meta"><b>Regał</b><small>w salonie</small></span>
+            </label>
+            <label class="prod-card">
+              <input type="radio" name="product" value="blat" />
+              <span class="prod-icon">▬</span>
+              <span class="prod-meta"><b>Blat kuchenny</b><small>w kuchni</small></span>
+            </label>
+            <label class="prod-card">
+              <input type="radio" name="product" value="stol" />
+              <span class="prod-icon">⊓</span>
+              <span class="prod-meta"><b>Stół</b><small>w jadalni</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field" id="field-shape" hidden>
+          <span class="field-label">Kształt blatu</span>
+          <div class="product-picker" role="radiogroup" aria-label="Kształt blatu">
+            <label class="prod-card">
+              <input type="radio" name="shape" value="okragly" checked />
+              <span class="prod-icon">●</span>
+              <span class="prod-meta"><b>Okrągły</b><small>średnica</small></span>
+            </label>
+            <label class="prod-card">
+              <input type="radio" name="shape" value="prostokatny" />
+              <span class="prod-icon">▭</span>
+              <span class="prod-meta"><b>Prostokątny</b><small>szer. × dł.</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field" id="field-width">
+          <label for="width"><span id="l-width">Szerokość</span> <output id="o-width">80 cm</output></label>
+          <input type="range" id="width" min="30" max="240" step="1" value="80" />
+        </div>
+
+        <div class="field" id="field-length" hidden>
+          <label for="length"><span id="l-length">Długość</span> <output id="o-length">180 cm</output></label>
+          <input type="range" id="length" min="120" max="260" step="1" value="180" />
+        </div>
+
+        <div class="field" id="field-diameter" hidden>
+          <label for="diameter"><span id="l-diameter">Średnica</span> <output id="o-diameter">100 cm</output></label>
+          <input type="range" id="diameter" min="60" max="160" step="1" value="100" />
+        </div>
+
+        <div class="field" id="field-height">
+          <label for="height"><span id="l-height">Wysokość</span> <output id="o-height">120 cm</output></label>
+          <input type="range" id="height" min="20" max="200" step="1" value="120" />
+        </div>
+
+        <div class="field" id="field-depth">
+          <label for="depth"><span id="l-depth">Głębokość</span> <output id="o-depth">30 cm</output></label>
+          <input type="range" id="depth" min="15" max="50" step="1" value="30" />
+        </div>
+
+        <div class="field" id="field-shelves">
+          <label for="shelves"><span id="l-shelves">Liczba półek</span> <output id="o-shelves">3</output></label>
+          <input type="range" id="shelves" min="1" max="8" step="1" value="3" />
+        </div>
+
+        <div class="field" id="field-thickness" hidden>
+          <label for="thickness"><span id="l-thickness">Grubość</span> <output id="o-thickness">4 cm</output></label>
+          <input type="range" id="thickness" min="2" max="6" step="1" value="4" />
+        </div>
+
+        <div class="field" id="field-wood">
+          <span class="field-label" id="l-wood">Rodzaj drewna</span>
+          <div class="wood-picker" role="radiogroup" aria-label="Rodzaj drewna">
+            <label class="wood-card">
+              <input type="radio" name="wood" value="sosna" checked />
+              <span class="swatch swatch-sosna"></span>
+              <span class="wood-meta"><b>Sosna</b><small>jasna, ciepła</small></span>
+            </label>
+            <label class="wood-card">
+              <input type="radio" name="wood" value="orzech" />
+              <span class="swatch swatch-orzech"></span>
+              <span class="wood-meta"><b>Orzech</b><small>ciemny, szlachetny</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field" id="field-woodlegs" hidden>
+          <span class="field-label">Drewno nóg</span>
+          <div class="wood-picker" role="radiogroup" aria-label="Drewno nóg">
+            <label class="wood-card">
+              <input type="radio" name="woodLegs" value="sosna" checked />
+              <span class="swatch swatch-sosna"></span>
+              <span class="wood-meta"><b>Sosna</b><small>jasna, ciepła</small></span>
+            </label>
+            <label class="wood-card">
+              <input type="radio" name="woodLegs" value="orzech" />
+              <span class="swatch swatch-orzech"></span>
+              <span class="wood-meta"><b>Orzech</b><small>ciemny, szlachetny</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="comment">Komentarz <small class="opt">(opcjonalnie)</small></label>
+          <textarea id="comment" rows="2" placeholder="Np. fazowane krawędzie, montaż naścienny…"></textarea>
+        </div>
+
+        <div class="contact-grid">
+          <div class="field">
+            <label for="name">Imię i nazwisko <small class="opt">(opcjonalnie)</small></label>
+            <input type="text" id="name" placeholder="Jan Kowalski" />
+          </div>
+          <div class="field">
+            <label for="email">E-mail <small class="opt">(opcjonalnie)</small></label>
+            <input type="email" id="email" placeholder="jan@przyklad.pl" />
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-line">
+            <span>Szacowana cena</span>
+            <strong id="price">— PLN</strong>
+          </div>
+          <small id="price-note">materiał + obróbka, orientacyjnie</small>
+        </div>
+
+        <button type="submit" class="btn-submit" id="submit">Złóż zamówienie</button>
+        <p class="form-status" id="status" role="status"></p>
+      </form>
+    </aside>
+  </main>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three.module.js",
+      "three/addons/": "/vendor/"
+    }
+  }
+  </script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
