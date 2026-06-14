@@ -12,7 +12,7 @@ import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGLPathTracer, GradientEquirectTexture } from 'three-gpu-pathtracer';
 
 // three-gpu-pathtracer 0.0.23 reads Scene.background/environmentRotation (Euler,
 // added to three in r163). We pin three 0.160, so shim them lazily per-instance.
@@ -396,10 +396,24 @@ export function initScene(container, opts = {}) {
   // The real-time raster view is for configuring; "Render HD" path-traces the
   // *current* configuration, accumulating samples into a photoreal still.
   // Any change (slider, product, camera move, resize) drops back to raster.
-  const PT_MAX = 64;        // progressive image is clean well before this
+  const PT_MAX = 160;       // higher ceiling now that variance is much lower
   let pathTracer = null;
   let ptActive = false;
   let ptPrevEnv = null;
+
+  // a smooth procedural sky/dome for the tracer to importance-sample — soft
+  // ambient fill that converges far faster (less noise) than emissive-only light
+  let ptEnv = null;
+  function getPtEnv() {
+    if (!ptEnv) {
+      ptEnv = new GradientEquirectTexture(1024);
+      ptEnv.topColor.set('#eaf1fb');
+      ptEnv.bottomColor.set('#c7b08c');
+      ptEnv.exponent = 1.2;
+      ptEnv.update();
+    }
+    return ptEnv;
+  }
 
   let lastW = 0, lastH = 0;
   function resize() {
@@ -420,13 +434,13 @@ export function initScene(container, opts = {}) {
         pathTracer = new WebGLPathTracer(renderer);
         pathTracer.tiles.set(2, 2);          // split work → UI stays responsive
         pathTracer.filterGlossyFactor = 0.5; // fewer fireflies on glossy wood
-        pathTracer.bounces = 3;
-        pathTracer.renderScale = 0.5;        // internal res; upscaled to canvas
+        pathTracer.bounces = 4;
+        pathTracer.renderScale = 0.75;       // internal res; upscaled to canvas
       }
-      // light the trace from the scene's own lights + emissive window; the
-      // PMREM/HDRI env used by raster isn't a format the sampler accepts here
+      // light the trace with a smooth procedural environment (importance-sampled
+      // → low noise) plus the scene's own lights
       ptPrevEnv = scene.environment;
-      scene.environment = null;
+      scene.environment = getPtEnv();
       pathTracer.setScene(scene, camera);
       ptActive = true;
       opts.onHD?.({ active: true, samples: 0, max: PT_MAX });
