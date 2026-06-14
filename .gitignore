@@ -1,0 +1,8 @@
+# local order storage (written by server.js when run locally)
+/data/*.csv
+/data/*.txt
+
+# vercel / tooling
+.vercel
+node_modules
+.DS_Store

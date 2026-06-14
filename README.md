@@ -23,6 +23,11 @@ Następnie otwórz **http://localhost:3000**
   - regał w salonie (podłoga deskowa, ściany, okno, dywan, obrazy, roślina),
   - blat na zabudowie kuchennej (szafki shaker, fartuch z płytek, górne szafki, bateria, miska),
   - proceduralne tekstury drewna (mapa koloru + bump), miękkie cienie PBR, obrót kamery myszą i zoom. Przebudowa na żywo przy każdej zmianie parametru.
+- Warstwa „bliżej fotorealizmu" (offline, bez zewnętrznych tekstur PBR):
+  - **fazowane krawędzie** mebli (`RoundedBoxGeometry`),
+  - **HDRI** (`public/assets/env.hdr`, CC0 Poly Haven) dla realistycznych odbić — z `RoomEnvironment` jako natychmiastowym fallbackiem,
+  - **RectAreaLight** — miękkie światło dzienne z okna,
+  - **post-processing** (SSAO + bloom + SMAA + OutputPass) przez `EffectComposer`.
 - Szacowana cena (regał: objętość × stawka m³; blat: powierzchnia × stawka m² + obróbka).
 - Komentarz oraz opcjonalne dane kontaktowe.
 

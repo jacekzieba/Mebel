@@ -3,6 +3,15 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ---------------------------------------------------------------------------
 // Wood species: pricing (used by app.js) + colour palette for procedural grain
@@ -26,6 +35,7 @@ const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const COUNTER_H = 0.9;      // worktop height (m)
 const WALL_Z = -0.35;       // back wall plane
+const TABLE_Z = 0.6;        // table sits forward, in the middle of the room
 
 // ---------------------------------------------------------------------------
 // Procedural wood texture — colour map + matching grayscale bump map
@@ -92,10 +102,21 @@ export function initScene(container) {
   container.appendChild(renderer.domElement);
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';
 
+  RectAreaLightUniformsLib.init();
+
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
+  // RoomEnvironment is the instant, offline fallback; the HDRI below upgrades
+  // reflections/lighting once it streams in (and degrades gracefully if absent)
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.background = new THREE.Color('#d9cdbb');
+
+  new RGBELoader().load('/assets/env.hdr', (hdr) => {
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    const env = pmrem.fromEquirectangular(hdr).texture;
+    scene.environment = env;
+    hdr.dispose();
+  });
 
   const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 100);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -114,7 +135,7 @@ export function initScene(container) {
   // dynamic product groups
   const shelfGroup = new THREE.Group(); scene.add(shelfGroup);
   const counterGroup = new THREE.Group(); scene.add(counterGroup); counterGroup.visible = false;
-  const tableGroup = new THREE.Group(); scene.add(tableGroup); tableGroup.visible = false;
+  const tableGroup = new THREE.Group(); tableGroup.position.z = TABLE_Z; scene.add(tableGroup); tableGroup.visible = false;
 
   const contact = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
@@ -142,7 +163,7 @@ export function initScene(container) {
     m.map.needsUpdate = m.bumpMap.needsUpdate = true;
     m.map.repeat.set(repU, repV); m.bumpMap.repeat.set(repU, repV);
     m.map.colorSpace = THREE.SRGBColorSpace;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m);
+    const mesh = new THREE.Mesh(roundedBox(sx, sy, sz), m);
     mesh.position.set(px, py, pz);
     mesh.castShadow = true; mesh.receiveShadow = true;
     return mesh;
@@ -204,7 +225,7 @@ export function initScene(container) {
     const insetMat = new THREE.MeshStandardMaterial({ color: '#ded4c2', roughness: 0.6 });
     const brass = new THREE.MeshStandardMaterial({ color: '#b89357', roughness: 0.3, metalness: 0.9 });
 
-    const carcass = new THREE.Mesh(new THREE.BoxGeometry(L, cabH, cabD), carcassMat);
+    const carcass = new THREE.Mesh(roundedBox(L, cabH, cabD), carcassMat);
     carcass.position.set(0, 0.09 + cabH / 2, cabZ);
     carcass.castShadow = carcass.receiveShadow = true;
     counterGroup.add(carcass);
@@ -223,10 +244,10 @@ export function initScene(container) {
     const doorW = L / nDoors;
     for (let i = 0; i < nDoors; i++) {
       const dx = -L / 2 + doorW * (i + 0.5);
-      const door = new THREE.Mesh(new THREE.BoxGeometry(doorW - 0.02, cabH - 0.03, 0.02), frontMat);
+      const door = new THREE.Mesh(roundedBox(doorW - 0.02, cabH - 0.03, 0.02), frontMat);
       door.position.set(dx, 0.09 + cabH / 2, front - 0.01);
       door.castShadow = true; counterGroup.add(door);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(doorW - 0.14, cabH - 0.15, 0.012), insetMat);
+      const panel = new THREE.Mesh(roundedBox(doorW - 0.14, cabH - 0.15, 0.012), insetMat);
       panel.position.set(dx, 0.09 + cabH / 2, front);
       counterGroup.add(panel);
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.018), brass);
@@ -235,7 +256,7 @@ export function initScene(container) {
     }
 
     // the worktop slab — the hero, in the chosen wood
-    const slab = board(L, T, D, 0, COUNTER_H + T / 2, zCenter,
+    const slab = board(getWoodMat(state.wood), L, T, D, 0, COUNTER_H + T / 2, zCenter,
                        Math.max(3, Math.round(L * 3.5)), Math.max(2, Math.round(D * 3.5)));
     counterGroup.add(slab);
 
@@ -247,11 +268,66 @@ export function initScene(container) {
     controls.target.set(0, COUNTER_H, 0);
   }
 
+  // ---- table (stół) ------------------------------------------------------
+  function buildTable(state) {
+    tableGroup.clear();
+    const topMat = getWoodMat(state.wood);       // blat
+    const legMat = getWoodMat(state.woodLegs);   // nogi
+    const H = state.height / 100;
+    const topT = 0.04;
+    const legH = H - topT;
+    const legS = 0.06;                            // square leg cross-section
+    const apronH = 0.07, apronT = 0.025;
+    const round = state.shape === 'okragly';
+
+    // footprint half-extents used for legs, aprons, contact shadow
+    let hx, hz, r = 0;
+    if (round) {
+      r = state.diameter / 200;
+      // legs sit on a circle of radius legR; their (x,z) is legR/√2 so the
+      // diagonal distance from the centre stays legR (well inside the top)
+      const legR = r * 0.74;
+      hx = hz = legR * Math.SQRT1_2;
+      tableGroup.add(disc(topMat, r, topT, 0, H - topT / 2, 0, Math.max(3, Math.round(r * 6))));
+      // apron ring just under the top, just outside the legs
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(legR + 0.03, legR + 0.03, apronH, 48, 1, true),
+        legMat.clone()
+      );
+      ring.position.y = H - topT - apronH / 2; ring.castShadow = true; tableGroup.add(ring);
+    } else {
+      const w = state.width / 100, l = state.length / 100;   // w = depth(z), l = length(x)
+      hx = l / 2 - legS / 2 - 0.04;
+      hz = w / 2 - legS / 2 - 0.04;
+      tableGroup.add(board(topMat, l, topT, w, 0, H - topT / 2, 0,
+                           Math.max(3, Math.round(l * 3.5)), Math.max(2, Math.round(w * 3.5))));
+      // four aprons just under the top
+      const ay = H - topT - apronH / 2;
+      tableGroup.add(board(legMat, l - legS * 2, apronH, apronT, 0, ay, hz, 4, 1));
+      tableGroup.add(board(legMat, l - legS * 2, apronH, apronT, 0, ay, -hz, 4, 1));
+      tableGroup.add(board(legMat, apronT, apronH, w - legS * 2, hx, ay, 0, 1, 2));
+      tableGroup.add(board(legMat, apronT, apronH, w - legS * 2, -hx, ay, 0, 1, 2));
+    }
+
+    // four legs
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      tableGroup.add(board(legMat, legS, legH, legS, sx * hx, legH / 2, sz * hz, 1, Math.max(2, Math.round(legH * 5))));
+    }
+
+    contact.scale.set((round ? r * 2 : (hx + legS)) * 1.9, (round ? r * 2 : (hz + legS)) * 1.9, 1);
+    contact.position.set(0, 0.005, TABLE_Z);
+    lights.frame(H + 0.1, hx * 2 + 0.4, hz * 2 + 0.4);
+    controls.target.set(0, H * 0.6, TABLE_Z);
+  }
+
   // ---- camera framing per product ----------------------------------------
   function applyCameraPreset(product) {
     if (product === 'blat') {
       camera.position.set(2.1, 1.55, 2.9);
       controls.target.set(0, COUNTER_H, 0);
+    } else if (product === 'stol') {
+      camera.position.set(2.5, 1.6, 3.6);
+      controls.target.set(0, 0.5, TABLE_Z);
     } else {
       camera.position.set(2.0, 1.5, 3.0);
       controls.target.set(0, 0.9, 0);
@@ -262,34 +338,54 @@ export function initScene(container) {
   // ---- dispatch ----------------------------------------------------------
   let currentProduct = null;
   function update(state) {
-    setWoodMaterial(state.wood);
     const switched = currentProduct !== state.product;
     currentProduct = state.product;
 
+    livingRoom.visible = kitchen.visible = dining.visible = false;
+    shelfGroup.visible = counterGroup.visible = tableGroup.visible = false;
+    contact.visible = false;
+
     if (state.product === 'blat') {
-      livingRoom.visible = false; kitchen.visible = true;
-      shelfGroup.visible = false; contact.visible = false;
-      counterGroup.visible = true;
+      kitchen.visible = true; counterGroup.visible = true;
       buildCounter(state);
+    } else if (state.product === 'stol') {
+      dining.visible = true; tableGroup.visible = true; contact.visible = true;
+      buildTable(state);
     } else {
-      livingRoom.visible = true; kitchen.visible = false;
-      counterGroup.visible = false;
-      shelfGroup.visible = true; contact.visible = true;
+      livingRoom.visible = true; shelfGroup.visible = true; contact.visible = true;
       buildShelf(state);
     }
     if (switched) applyCameraPreset(state.product);
   }
 
   // ---- resize + render loop ----------------------------------------------
+  // ---- post-processing: AO + soft bloom + anti-aliasing ------------------
+  // (all offline, no external assets — pushes the look closer to a render)
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const ssao = new SSAOPass(scene, camera, 1, 1);
+  ssao.kernelRadius = 0.12;        // metre-scale scene → small radius
+  ssao.minDistance = 0.0008;
+  ssao.maxDistance = 0.06;
+  composer.addPass(ssao);
+
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.18, 0.7, 0.95);
+  composer.addPass(bloom);
+
+  composer.addPass(new SMAAPass(1, 1));
+  composer.addPass(new OutputPass());
+
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     renderer.setSize(w, h, false);
+    composer.setSize(w, h);
     camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(container);
   resize();
 
-  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  renderer.setAnimationLoop(() => { controls.update(); composer.render(); });
 
   return { update };
 }
@@ -350,9 +446,9 @@ function buildKitchen() {
   const upBody = new THREE.MeshStandardMaterial({ color: '#d9cfbd', roughness: 0.7 });
   const brass = new THREE.MeshStandardMaterial({ color: '#b89357', roughness: 0.3, metalness: 0.9 });
   for (const dx of [-0.45, 0.45]) {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.55, 0.34), upBody);
+    const body = new THREE.Mesh(roundedBox(0.85, 0.55, 0.34), upBody);
     body.position.set(dx, 1.72, WALL_Z + 0.18); body.castShadow = body.receiveShadow = true; g.add(body);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.02), upMat);
+    const door = new THREE.Mesh(roundedBox(0.8, 0.5, 0.02), upMat);
     door.position.set(dx, 1.72, WALL_Z + 0.36); door.castShadow = true; g.add(door);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.08, 0.018), brass);
     handle.position.set(dx - 0.34, 1.55, WALL_Z + 0.37); g.add(handle);
@@ -361,6 +457,49 @@ function buildKitchen() {
   const win = makeWindow(); win.position.set(1.75, 1.55, WALL_Z + 0.01); win.scale.set(0.85, 0.85, 1); g.add(win);
 
   g.add(makePlant(-1.7, 0.5));
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Dining room environment (static; the table is rebuilt dynamically)
+// ---------------------------------------------------------------------------
+function buildDiningRoom() {
+  const g = new THREE.Group();
+
+  const floorTex = makeFloorTexture();
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshPhysicalMaterial({
+    map: floorTex.map, bumpMap: floorTex.bumpMap, bumpScale: 0.5,
+    roughnessMap: floorTex.roughnessMap, roughness: 0.72, metalness: 0,
+    clearcoat: 0.32, clearcoatRoughness: 0.55, envMapIntensity: 0.55,
+  }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor);
+
+  addWalls(g);
+
+  const win = makeWindow(); win.position.set(1.8, 1.6, WALL_Z + 0.01); g.add(win);
+
+  // large rug centred under the table
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.4),
+    new THREE.MeshStandardMaterial({ map: makeRugTexture(), roughness: 0.98 }));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.004, TABLE_Z); rug.receiveShadow = true; g.add(rug);
+
+  addFramedArt(g, -1.7, 1.7, 0.55, 0.68, '#6f8390', '#bcc9c3');
+  addFramedArt(g, -2.3, 1.5, 0.4, 0.5, '#9a8463', '#ddcaa1');
+
+  // pendant lamp above the table
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.9, 8),
+    new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.6 }));
+  cord.position.set(0, 2.45, TABLE_Z); g.add(cord);
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.2, 32, 1, true),
+    new THREE.MeshStandardMaterial({ color: '#3a3531', roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide }));
+  shade.position.set(0, 1.9, TABLE_Z); g.add(shade);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12),
+    new THREE.MeshStandardMaterial({ color: '#fff3d6', emissive: '#ffd28a', emissiveIntensity: 1.4 }));
+  bulb.position.set(0, 1.86, TABLE_Z); g.add(bulb);
+  const pool = new THREE.PointLight('#ffe2b0', 3.5, 4, 2);
+  pool.position.set(0, 1.85, TABLE_Z); g.add(pool);
+
+  g.add(makePlant(1.9, TABLE_Z + 0.2));
   return g;
 }
 
@@ -418,6 +557,13 @@ function addLights(scene) {
   const glow = new THREE.PointLight('#ffcf8f', 4, 6, 2);
   glow.position.set(1.6, 1.5, 0.15); scene.add(glow);
 
+  // soft daylight pouring in from the window (no shadows, but lovely soft fill
+  // + highlights on glossy surfaces — the windows in all three rooms align)
+  const area = new THREE.RectAreaLight('#fff1d6', 5, 1.2, 1.5);
+  area.position.set(1.72, 1.55, WALL_Z + 0.05);
+  area.lookAt(-0.3, 0.8, 1.4);
+  scene.add(area);
+
   return {
     frame(h, w, d) {
       sun.target.position.set(0, h * 0.45, 0);
@@ -427,6 +573,12 @@ function addLights(scene) {
       cam.updateProjectionMatrix();
     },
   };
+}
+
+// box with softly chamfered edges — catches light like a real machined panel
+function roundedBox(w, h, d, maxR = 0.012) {
+  const r = Math.max(0.0012, Math.min(maxR, Math.min(w, h, d) * 0.45));
+  return new RoundedBoxGeometry(w, h, d, 3, r);
 }
 
 function makeFaucet(px, py, pz) {
@@ -591,7 +743,7 @@ function makeContactShadow() {
 // ---------------------------------------------------------------------------
 function addFramedArt(g, px, py, w, h, c1, c2) {
   const z = WALL_Z + 0.03;
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.06, h + 0.06, 0.03),
+  const frame = new THREE.Mesh(roundedBox(w + 0.06, h + 0.06, 0.03, 0.006),
     new THREE.MeshStandardMaterial({ color: '#3c2a1a', roughness: 0.5, metalness: 0.1 }));
   frame.position.set(px, py, z); frame.castShadow = true; g.add(frame);
 
