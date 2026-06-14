@@ -100,6 +100,28 @@ html, body {
   backdrop-filter: blur(4px);
   pointer-events: none;
 }
+.hd-btn {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 3;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: rgba(44, 36, 28, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 8px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, transform 0.08s;
+}
+.hd-btn:hover { background: rgba(155, 90, 43, 0.85); }
+.hd-btn:active { transform: translateY(1px); }
+.hd-btn.rendering { background: rgba(155, 90, 43, 0.92); }
+.hd-btn.done { background: rgba(63, 125, 74, 0.9); }
 
 .stage-caption {
   display: flex;

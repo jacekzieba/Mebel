@@ -24,6 +24,7 @@
       <div class="stage-frame">
         <div id="scene" class="scene">
           <span class="scene-hint">↺ obróć myszą · scroll = zoom</span>
+          <button id="hd-btn" class="hd-btn" type="button" title="Render fotorealistyczny (path tracing)">✨ Render HD</button>
         </div>
       </div>
       <div class="stage-caption">
@@ -178,7 +179,8 @@
   {
     "imports": {
       "three": "/vendor/three.module.js",
-      "three/addons/": "/vendor/"
+      "three/addons/": "/vendor/",
+      "three-gpu-pathtracer": "/vendor/pathtracer/three-gpu-pathtracer.bundle.mjs"
     }
   }
   </script>

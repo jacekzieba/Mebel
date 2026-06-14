@@ -41,7 +41,31 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-const scene3d = initScene($('scene'));
+const scene3d = initScene($('scene'), { onHD: handleHD });
+
+// ---- path-traced "Render HD" button ---------------------------------------
+function handleHD(s) {
+  const btn = $('hd-btn');
+  if (!s.active) {
+    btn.dataset.active = '0';
+    btn.className = 'hd-btn';
+    btn.textContent = '✨ Render HD';
+    return;
+  }
+  btn.dataset.active = '1';
+  if (s.done) {
+    btn.className = 'hd-btn done';
+    btn.textContent = `✓ HD gotowe (${s.samples})`;
+  } else {
+    btn.className = 'hd-btn rendering';
+    btn.textContent = `■ Stop · ${Math.round((s.samples / s.max) * 100)}%`;
+  }
+}
+
+$('hd-btn').addEventListener('click', () => {
+  if ($('hd-btn').dataset.active === '1') scene3d.stopHD();
+  else scene3d.startHD();
+});
 
 // ---- helpers --------------------------------------------------------------
 const fmtPrice = (n) => new Intl.NumberFormat('pl-PL').format(n) + ' PLN';
